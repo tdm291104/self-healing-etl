@@ -1,0 +1,30 @@
+version: 2
+
+models:
+  - name: fct_trades_usd_value
+    description: >
+      Every trade enriched with the closest available USD price (within ±15 min).
+      Rows with NULL trade_value_usd indicate a price gap — the self-healing agent
+      will attempt to backfill these using a wider time window or escalate.
+    columns:
+      - name: trade_id
+        tests: [not_null, unique]
+      - name: user_id
+        tests: [not_null]
+      - name: coin
+        tests: [not_null]
+      - name: quantity
+        tests: [not_null]
+      - name: trade_time
+        tests: [not_null]
+
+  - name: fct_user_portfolio_value
+    description: >
+      Current net portfolio value per user per coin, calculated from all trades.
+      Updated each time dbt runs. NULL position_value_usd means the latest price
+      is unavailable.
+    columns:
+      - name: user_id
+        tests: [not_null]
+      - name: coin
+        tests: [not_null]

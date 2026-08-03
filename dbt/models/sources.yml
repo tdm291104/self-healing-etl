@@ -1,0 +1,32 @@
+version: 2
+
+sources:
+  - name: raw
+    database: crypto_dw
+    schema: raw
+    description: "Raw data layer — untransformed data from all ingest sources"
+
+    tables:
+      - name: trades
+        description: "Raw trade events exported daily from the internal matching engine"
+        columns:
+          - name: user_id
+            description: "User identifier"
+          - name: coin
+            description: "Cryptocurrency symbol (BTC, ETH, USDT, SOL)"
+          - name: side
+            description: "Trade direction: buy or sell"
+          - name: quantity
+            description: "Trade quantity in the coin's native units"
+          - name: trade_time
+            description: "UTC timestamp when the trade was executed"
+
+      - name: crypto_prices
+        description: "Hourly spot prices fetched from the CoinGecko free API"
+        columns:
+          - name: coin
+            description: "Cryptocurrency symbol"
+          - name: price_usd
+            description: "Spot price in USD at fetch time"
+          - name: fetched_at
+            description: "UTC timestamp when the price was recorded"

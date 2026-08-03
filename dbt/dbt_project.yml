@@ -1,0 +1,25 @@
+name: 'crypto_etl'
+version: '1.0.0'
+config-version: 2
+
+profile: 'crypto_etl'
+
+model-paths:  ["models"]
+test-paths:   ["tests"]
+macro-paths:  ["macros"]
+seed-paths:   ["seeds"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  crypto_etl:
+    staging:
+      +schema: staging
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table

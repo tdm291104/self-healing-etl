@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: stg_raw_trades
+    description: "Cleaned and validated trades from raw layer"
+    columns:
+      - name: id
+        tests: [not_null, unique]
+      - name: user_id
+        tests: [not_null]
+      - name: coin
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['BTC', 'ETH', 'USDT', 'SOL']
+      - name: side
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['buy', 'sell']
+      - name: quantity
+        tests: [not_null]
+      - name: trade_time
+        tests: [not_null]
+
+  - name: stg_raw_crypto_prices
+    description: "Deduplicated hourly crypto prices from CoinGecko"
+    columns:
+      - name: coin
+        tests: [not_null]
+      - name: price_usd
+        tests: [not_null]
+      - name: fetched_at
+        tests: [not_null]

@@ -1,0 +1,127 @@
+version: '3.8'
+
+# ---------------------------------------------------------------------------
+# Shared Airflow config (DRY anchor)
+# ---------------------------------------------------------------------------
+x-airflow-common: &airflow-common
+  build:
+    context: ./docker/airflow
+    dockerfile: Dockerfile
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow_db
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-46BKJoQYlPPOexq0OhDZnIlNepKFf28zYzoJe3y4d-U=}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+    AIRFLOW__LOGGING__LOGGING_LEVEL: INFO
+    # Airflow connection to data warehouse (used by DAGs via PostgresHook)
+    AIRFLOW_CONN_CRYPTO_DW: postgresql://airflow:airflow@postgres:5432/crypto_dw
+    # dbt environment variables (picked up by dbt/profiles.yml)
+    DBT_DB_HOST: postgres
+    DBT_DB_USER: dbt_user
+    DBT_DB_PASSWORD: dbt_password
+    DBT_DB_NAME: crypto_dw
+    DBT_PROFILES_DIR: /opt/airflow/dbt
+    PYTHONPATH: /opt/airflow
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./dbt:/opt/airflow/dbt
+    - ./data:/opt/airflow/data
+    - ./scripts:/opt/airflow/scripts
+    - ./agent:/opt/airflow/agent
+    - airflow_logs:/opt/airflow/logs
+    - airflow_plugins:/opt/airflow/plugins
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+# ---------------------------------------------------------------------------
+# Services
+# ---------------------------------------------------------------------------
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: etl_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sh:/docker-entrypoint-initdb.d/10_init_db.sh
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ── Airflow init (runs once, then exits) ────────────────────────────────
+  airflow-init:
+    <<: *airflow-common
+    container_name: etl_airflow_init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com || echo "User already exists, skipping."
+        echo "Airflow init complete."
+    restart: "no"
+
+  # ── Airflow Webserver ───────────────────────────────────────────────────
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: etl_airflow_webserver
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  # ── Airflow Scheduler ───────────────────────────────────────────────────
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: etl_airflow_scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+# ---------------------------------------------------------------------------
+# Volumes
+# ---------------------------------------------------------------------------
+volumes:
+  postgres_data:
+  airflow_logs:
+  airflow_plugins:

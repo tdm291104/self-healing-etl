@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+env/
+*.egg
+
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/.user.yml
+
+# Environment & secrets
+.env
+*.env.local
+
+# Data files (generated CSVs)
+data/*.csv
+data/*.json
+
+# Docker volumes (if mounted locally)
+postgres_data/
+airflow_logs/
+
+# Airflow
+logs/
+airflow.cfg
+airflow_settings.yaml
+standalone_admin_password.txt
+webserver_config.py
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Claude Code internal files
+.claude/
+CLAUDE.md
+*.claude_scratch
