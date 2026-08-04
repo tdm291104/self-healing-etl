@@ -26,6 +26,9 @@ x-airflow-common: &airflow-common
     DBT_DB_NAME: crypto_dw
     DBT_PROFILES_DIR: /opt/airflow/dbt
     PYTHONPATH: /opt/airflow
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
   volumes:
     - ./dags:/opt/airflow/dags
     - ./dbt:/opt/airflow/dbt

@@ -5,3 +5,6 @@ psycopg2-binary==2.9.9
 requests==2.31.0
 pandas==2.1.4
 faker==22.0.0
+langgraph>=0.2.0
+langchain-anthropic>=0.1.0
+langchain-core>=0.2.0
