@@ -33,7 +33,7 @@ def monitor_agent_dag():
             """
             SELECT table_name, check_name, status, details
             FROM monitoring.dq_check_results
-            WHERE details->>'date' = %s
+            WHERE timestamp::date = %s::date
               AND status IN ('fail', 'warning')
             ORDER BY
                 CASE status WHEN 'fail' THEN 0 ELSE 1 END,

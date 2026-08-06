@@ -3,6 +3,7 @@ Self-Healing ETL — Agent Dashboard (Phase 4)
 Shows agent audit trail and DQ check history from monitoring schema.
 """
 
+import contextlib
 import json
 import os
 from datetime import datetime
@@ -46,34 +47,31 @@ DECISION_ICON = {
 
 @st.cache_data(ttl=30)
 def load_agent_actions() -> pd.DataFrame:
-    conn = psycopg2.connect(**DB_CONFIG)
-    df = pd.read_sql(
-        """
-        SELECT id, timestamp, trigger_type, diagnosis, decision,
-               action_taken, confidence_score, human_feedback
-        FROM monitoring.agent_actions
-        ORDER BY timestamp DESC
-        LIMIT 200
-        """,
-        conn,
-    )
-    conn.close()
-    return df
+    with contextlib.closing(psycopg2.connect(**DB_CONFIG)) as conn:
+        return pd.read_sql(
+            """
+            SELECT id, timestamp, trigger_type, diagnosis, decision,
+                   action_taken, confidence_score, human_feedback
+            FROM monitoring.agent_actions
+            ORDER BY timestamp DESC
+            LIMIT 200
+            """,
+            conn,
+        )
 
 
 @st.cache_data(ttl=30)
 def load_dq_results() -> pd.DataFrame:
-    conn = psycopg2.connect(**DB_CONFIG)
-    df = pd.read_sql(
-        """
-        SELECT id, table_name, check_name, status, details, timestamp
-        FROM monitoring.dq_check_results
-        ORDER BY timestamp DESC
-        LIMIT 500
-        """,
-        conn,
-    )
-    conn.close()
+    with contextlib.closing(psycopg2.connect(**DB_CONFIG)) as conn:
+        df = pd.read_sql(
+            """
+            SELECT id, table_name, check_name, status, details, timestamp
+            FROM monitoring.dq_check_results
+            ORDER BY timestamp DESC
+            LIMIT 500
+            """,
+            conn,
+        )
     if not df.empty:
         df['date'] = pd.to_datetime(df['timestamp']).dt.date
         df['details_str'] = df['details'].apply(
@@ -250,7 +248,7 @@ if total_runs:
         'human_feedback': 'Feedback',
     })
     st.dataframe(
-        display_actions.style.applymap(
+        display_actions.style.map(
             lambda v: _color_cell(v, DECISION_COLOR), subset=['Decision']
         ),
         use_container_width=True,
@@ -282,7 +280,7 @@ if not dq.empty:
         'details_str': 'Details',
     })
     st.dataframe(
-        display_dq.style.applymap(
+        display_dq.style.map(
             lambda v: _color_cell(v, STATUS_COLOR), subset=['Status']
         ),
         use_container_width=True,

@@ -13,18 +13,20 @@ def read_dq_results(date: str) -> str:
     """Read all DQ check results for a given date (YYYY-MM-DD) from monitoring.dq_check_results."""
     conn = get_conn()
     cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT check_name, status, details, timestamp
-        FROM monitoring.dq_check_results
-        WHERE details->>'date' = %s
-        ORDER BY timestamp DESC
-        """,
-        (date,),
-    )
-    rows = cursor.fetchall()
-    cursor.close()
-    conn.close()
+    try:
+        cursor.execute(
+            """
+            SELECT check_name, status, details, timestamp
+            FROM monitoring.dq_check_results
+            WHERE timestamp::date = %s::date
+            ORDER BY timestamp DESC
+            """,
+            (date,),
+        )
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
     results = [
         {'check': r[0], 'status': r[1], 'details': r[2], 'at': str(r[3])}
         for r in rows
@@ -39,29 +41,30 @@ def get_schema_diff(table_name: str = 'raw.trades') -> str:
     schema, tbl = table_name.split('.')
     conn = get_conn()
     cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT column_name, data_type
+            FROM information_schema.columns
+            WHERE table_schema = %s AND table_name = %s
+            ORDER BY ordinal_position
+            """,
+            (schema, tbl),
+        )
+        actual = {r[0]: r[1] for r in cursor.fetchall()}
 
-    cursor.execute(
-        """
-        SELECT column_name, data_type
-        FROM information_schema.columns
-        WHERE table_schema = %s AND table_name = %s
-        ORDER BY ordinal_position
-        """,
-        (schema, tbl),
-    )
-    actual = {r[0]: r[1] for r in cursor.fetchall()}
-
-    cursor.execute(
-        """
-        SELECT column_name, data_type
-        FROM monitoring.expected_schemas
-        WHERE table_name = %s
-        """,
-        (table_name,),
-    )
-    expected = {r[0]: r[1] for r in cursor.fetchall()}
-    cursor.close()
-    conn.close()
+        cursor.execute(
+            """
+            SELECT column_name, data_type
+            FROM monitoring.expected_schemas
+            WHERE table_name = %s
+            """,
+            (table_name,),
+        )
+        expected = {r[0]: r[1] for r in cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
 
     # Exclude internal columns not in expected_schemas
     internal = {'id', 'raw_quantity', 'source_file', 'ingested_at'}
@@ -84,44 +87,44 @@ def sample_bad_rows(source_file: str, issue_type: str) -> str:
     """
     conn = get_conn()
     cursor = conn.cursor()
-
-    if issue_type == 'null_user_id':
-        cursor.execute(
-            "SELECT id, user_id, coin, side, quantity, raw_quantity, trade_time "
-            "FROM raw.trades WHERE source_file = %s AND user_id IS NULL LIMIT 5",
-            (source_file,),
-        )
-    elif issue_type == 'null_quantity':
-        cursor.execute(
-            "SELECT id, user_id, coin, side, quantity, raw_quantity, trade_time "
-            "FROM raw.trades WHERE source_file = %s "
-            "AND quantity IS NULL AND raw_quantity IS NOT NULL LIMIT 5",
-            (source_file,),
-        )
-    elif issue_type == 'null_side':
-        cursor.execute(
-            "SELECT id, user_id, coin, side, quantity, raw_quantity, trade_time "
-            "FROM raw.trades WHERE source_file = %s AND side IS NULL LIMIT 5",
-            (source_file,),
-        )
-    elif issue_type == 'duplicate':
-        cursor.execute(
-            "SELECT user_id, coin, side, quantity, trade_time, COUNT(*) AS cnt "
-            "FROM raw.trades WHERE source_file = %s "
-            "GROUP BY user_id, coin, side, quantity, trade_time HAVING COUNT(*) > 1 LIMIT 5",
-            (source_file,),
-        )
-    else:
-        cursor.execute(
-            "SELECT id, user_id, coin, side, quantity, raw_quantity, trade_time "
-            "FROM raw.trades WHERE source_file = %s LIMIT 5",
-            (source_file,),
-        )
-
-    cols = [d[0] for d in cursor.description]
-    rows = [dict(zip(cols, [str(v) for v in r])) for r in cursor.fetchall()]
-    cursor.close()
-    conn.close()
+    try:
+        if issue_type == 'null_user_id':
+            cursor.execute(
+                "SELECT id, user_id, coin, side, quantity, raw_quantity, trade_time "
+                "FROM raw.trades WHERE source_file = %s AND user_id IS NULL LIMIT 5",
+                (source_file,),
+            )
+        elif issue_type == 'null_quantity':
+            cursor.execute(
+                "SELECT id, user_id, coin, side, quantity, raw_quantity, trade_time "
+                "FROM raw.trades WHERE source_file = %s "
+                "AND quantity IS NULL AND raw_quantity IS NOT NULL LIMIT 5",
+                (source_file,),
+            )
+        elif issue_type == 'null_side':
+            cursor.execute(
+                "SELECT id, user_id, coin, side, quantity, raw_quantity, trade_time "
+                "FROM raw.trades WHERE source_file = %s AND side IS NULL LIMIT 5",
+                (source_file,),
+            )
+        elif issue_type == 'duplicate':
+            cursor.execute(
+                "SELECT user_id, coin, side, quantity, trade_time, COUNT(*) AS cnt "
+                "FROM raw.trades WHERE source_file = %s "
+                "GROUP BY user_id, coin, side, quantity, trade_time HAVING COUNT(*) > 1 LIMIT 5",
+                (source_file,),
+            )
+        else:
+            cursor.execute(
+                "SELECT id, user_id, coin, side, quantity, raw_quantity, trade_time "
+                "FROM raw.trades WHERE source_file = %s LIMIT 5",
+                (source_file,),
+            )
+        cols = [d[0] for d in cursor.description]
+        rows = [dict(zip(cols, [str(v) for v in r])) for r in cursor.fetchall()]
+    finally:
+        cursor.close()
+        conn.close()
     return json.dumps(rows, indent=2)
 
 

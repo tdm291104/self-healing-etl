@@ -28,6 +28,12 @@ from agent.tools import check_source_file, get_schema_diff, read_dq_results, sam
 
 TOOLS = [read_dq_results, get_schema_diff, sample_bad_rows, check_source_file]
 
+# Hoisted at module level — reused across every tool-loop iteration
+_llm = ChatAnthropic(
+    model='claude-haiku-4-5-20251001',
+    api_key=ANTHROPIC_API_KEY,
+).bind_tools(TOOLS)
+
 SYSTEM_PROMPT = """You are a self-healing ETL agent for a crypto trading analytics pipeline.
 
 Your job:
@@ -62,12 +68,8 @@ class AgentState(TypedDict):
 
 
 def diagnose(state: AgentState) -> dict:
-    llm = ChatAnthropic(
-        model='claude-haiku-4-5-20251001',
-        api_key=ANTHROPIC_API_KEY,
-    ).bind_tools(TOOLS)
     messages = [SystemMessage(content=SYSTEM_PROMPT)] + state['messages']
-    response = llm.invoke(messages)
+    response = _llm.invoke(messages)
     return {'messages': [response]}
 
 
@@ -86,12 +88,26 @@ def extract_decision(state: AgentState) -> dict:
     else:
         text = str(content)
 
-    match = re.search(r'```json\s*(\{.*?\})\s*```', text, re.DOTALL)
+    match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
     if not match:
-        match = re.search(r'\{[^{}]*"decision"[^{}]*\}', text, re.DOTALL)
+        # Fallback: find outermost {...} containing "decision" via brace counting
+        start = text.find('{"decision"')
+        if start == -1:
+            start = text.find('{ "decision"')
+        if start != -1:
+            depth, end = 0, start
+            for i, ch in enumerate(text[start:], start):
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        end = i + 1
+                        break
+            match = type('m', (), {'group': lambda self, n: text[start:end]})()
 
     if match:
-        raw = match.group(1) if '```' in match.group(0) else match.group(0)
+        raw = match.group(1)
         try:
             data = json.loads(raw)
             return {
@@ -131,28 +147,33 @@ def execute_fix(state: AgentState) -> dict:
 def record_and_notify(state: AgentState) -> dict:
     conn = get_conn()
     cursor = conn.cursor()
-    cursor.execute(
-        """
-        INSERT INTO monitoring.agent_actions
-            (trigger_type, diagnosis, decision, action_taken, confidence_score)
-        VALUES (%s, %s, %s, %s, %s)
-        """,
-        (
-            'dq_failure',
-            state['diagnosis'],
-            state['decision'],
-            state['action_taken'],
-            state['confidence'],
-        ),
-    )
-    conn.commit()
-    cursor.close()
-    conn.close()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO monitoring.agent_actions
+                (trigger_type, diagnosis, decision, action_taken, confidence_score)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                'dq_failure',
+                state['diagnosis'],
+                state['decision'],
+                state['action_taken'],
+                state['confidence'],
+            ),
+        )
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
 
-    send_message(format_agent_message(
-        state['date'], state['decision'], state['diagnosis'],
-        state['action_taken'], state['confidence'],
-    ))
+    try:
+        send_message(format_agent_message(
+            state['date'], state['decision'], state['diagnosis'],
+            state['action_taken'], state['confidence'],
+        ))
+    except Exception as e:
+        print(f"Telegram notification failed (non-fatal): {e}")
     return {}
 
 
@@ -176,10 +197,14 @@ def _compile() -> StateGraph:
     return g.compile()
 
 
-_agent = _compile()
+_agent = None
 
 
 def run_agent(source_file: str, date: str, failed_checks: list[dict]) -> dict:
+    global _agent
+    if _agent is None:
+        _agent = _compile()
+
     context = (
         f"Investigate DQ failures for source_file='{source_file}' (date: {date}):\n\n"
         f"{json.dumps(failed_checks, indent=2)}\n\n"
