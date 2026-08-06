@@ -92,8 +92,9 @@ cp .env.example .env
 # 2. Build and start all services
 docker-compose up --build
 
-# 3. Airflow UI → http://localhost:8080  (admin / admin)
-# 4. Enable DAGs and trigger manually to test error scenarios
+# 3. Open UIs
+#    Airflow    → http://localhost:8080  (admin / admin)
+#    Dashboard  → http://localhost:8501
 ```
 
 **DAG schedule:**
@@ -135,7 +136,7 @@ crypto_dw
 | 1 | ✅ Done | Airflow + PostgreSQL + dbt pipeline running end-to-end |
 | 2 | ✅ Done | Controlled error injection + 5 automated DQ checks |
 | 3 | ✅ Done | LangGraph agent with tool suite and decision engine |
-| 4 | 🔲 | Streamlit dashboard showing agent audit trail |
+| 4 | ✅ Done | Streamlit dashboard showing agent audit trail and DQ history |
 
 ---
 
@@ -145,7 +146,7 @@ crypto_dw
 ├── dags/              Airflow DAGs (ingest, prices, transform, monitor)
 ├── dbt/               dbt project (models, tests, macros)
 ├── agent/             LangGraph agent (graph, tools, fixes, telegram)
-├── dashboard/         Streamlit app (Phase 4)
+├── dashboard/         Streamlit app (app.py, Dockerfile)
 ├── docker/airflow/    Custom Airflow Dockerfile + requirements
 ├── scripts/           DB init script, CSV generator with error injection
 └── data/              Generated CSV files (gitignored)

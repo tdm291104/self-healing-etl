@@ -121,6 +121,25 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
+  # ── Streamlit Dashboard ─────────────────────────────────────────────────────
+  streamlit:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: etl_streamlit
+    ports:
+      - "8501:8501"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: crypto_dw
+      DB_USER: dbt_user
+      DB_PASSWORD: dbt_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 # ---------------------------------------------------------------------------
 # Volumes
 # ---------------------------------------------------------------------------
